@@ -2,6 +2,21 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { GoogleGenAI, Type } from "@google/genai";
 
+// Fix: Define types for the structured data to ensure type safety.
+interface Rule {
+    id: string;
+    was: string;
+    warum: string;
+    wie: string;
+}
+
+interface Version {
+    version: string;
+    rules: Rule[];
+}
+
+type ReconstructedData = Record<string, Version>;
+
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 function App() {
@@ -12,7 +27,6 @@ function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [activeTab, setActiveTab] = useState('analysis');
     const [statusMessage, setStatusMessage] = useState('');
-    const [reconstructionPlan, setReconstructionPlan] = useState('');
     const [reconstructedData, setReconstructedData] = useState('');
     const [progress, setProgress] = useState(0);
     const [reconstructionLog, setReconstructionLog] = useState([]);
@@ -90,7 +104,6 @@ function App() {
         setProgress(0);
         setReconstructionLog([]);
         setReconstructedData('');
-        setReconstructionPlan('');
         setStatusMessage('Starte semantische Rekonstruktion...');
 
         try {
@@ -99,15 +112,8 @@ function App() {
             setProgress(10);
 
             const mainContent = await readFileContent(mainFile);
-            let skeletonContent = '';
-            let denseContent = '';
-
-            if (skeletonFile) {
-                skeletonContent = await readFileContent(skeletonFile);
-            }
-            if (denseFile) {
-                denseContent = await readFileContent(denseFile);
-            }
+            const skeletonContent = skeletonFile ? await readFileContent(skeletonFile) : '';
+            const denseContent = denseFile ? await readFileContent(denseFile) : '';
 
             addLogEntry('Analysiere Regelwerk-Struktur...');
             setProgress(30);
@@ -115,56 +121,64 @@ function App() {
             // Prepare the reconstruction prompt
             const prompt = `EVOKI REGELWERK-SEMANTISCHE REKONSTRUKTION
 
-HAUPTDATEI (Chatverlauf mit Versionen 1.0-2.8.R):
-${mainContent.substring(0, 5000)}... [Gesamtlänge: ${mainContent.length} Zeichen]
+AUFGABE:
+Du bist ein KI-Assistent, der darauf spezialisiert ist, ein versioniertes Regelwerk aus einem Chatverlauf zu rekonstruieren.
+Analysiere die bereitgestellten Dateiinhalte, um ein vollständiges, strukturiertes JSON-Objekt des Regelwerks zu erstellen.
 
-${skeletonFile ? `SKELETT-FORMAT (Komplette Regelliste, oberflächlich):
-${skeletonContent.substring(0, 3000)}...` : 'KEIN SKELETT-FORMAT VORHANDEN'}
+KONTEXTDATEIEN:
 
-${denseFile ? `DICHTES FORMAT (Wenige Regeln, volle Tiefe):
-${denseContent.substring(0, 3000)}...` : 'KEIN DICHTERES FORMAT VORHANDEN'}
+1.  **HAUPTDATEI (Primärquelle):**
+    Ein langer Chatverlauf, der die Entwicklung des Regelwerks von Version 1.0 bis 2.8.R dokumentiert.
+    ---
+    {/* Fix: Cast file content to string before using substring to avoid type errors. */}
+    ${String(mainContent).substring(0, 15000)}...
+    ---
 
-REKONSTRUKTIONS-AUFGABE:
+2.  **SKELETT-FORMAT (Strukturübersicht, falls vorhanden):**
+    Eine Liste aller Regeln, aber nur mit oberflächlichen "Was"-Beschreibungen.
+    ---
+    {/* Fix: Cast file content to string before using substring to avoid type errors. */}
+    ${skeletonFile ? String(skeletonContent).substring(0, 5000) + '...' : 'Nicht vorhanden.'}
+    ---
 
-1. STRUKTURANALYSE: Analysiere das Muster aus dem dichten Format - wie werden "Was", "Warum", "Wie" für vollständig dokumentierte Regeln beschrieben?
+3.  **DICHTES FORMAT (Tiefenbeispiel, falls vorhanden):**
+    Einige wenige Regeln, die vollständig mit "Was" (Der exakte Wortlaut), "Warum" (Die Seele), und "Wie" (Die Funktion) beschrieben sind. Dies dient als Musterbeispiel.
+    ---
+    {/* Fix: Cast file content to string before using substring to avoid type errors. */}
+    ${denseFile ? String(denseContent).substring(0, 5000) + '...' : 'Nicht vorhanden.'}
+    ---
 
-2. MUSTERERKENNUNG: Lerne die semantische Transformationsregel:
-   - Wie wird aus einer oberflächlichen Regel (nur "Was") eine tiefe Regel ("Was", "Warum", "Wie")?
-   - Welche Sprachmuster, Formulierungen und Strukturen werden verwendet?
+REKONSTRUKTIONSSCHRITTE:
 
-3. SEMANTISCHE REKONSTRUKTION: Wende das gelernte Muster auf ALLE Regeln im Skelett-Format an, um die fehlende Tiefe zu ergänzen.
+1.  **Muster lernen:** Analysiere das "Dichte Format" (falls vorhanden), um zu verstehen, wie eine vollständige Regel mit "Was", "Warum" und "Wie" strukturiert ist. Lerne die semantische Tiefe und den typischen Sprachstil.
 
-4. VERSIONSPROZESS: Berücksichtige die chronologische Entwicklung der Regeln über die Versionen 1.0-2.8.R.
+2.  **Struktur extrahieren:** Identifiziere alle Versionen (z.B. "1.0", "1.1", ...) und die dazugehörigen Regeln aus der "HAUPTDATEI" und dem "SKELETT-FORMAT".
 
-GENERIERE FOLGENDE AUSGABEN:
+3.  **Tiefe ergänzen:** Wende das gelernte Muster auf ALLE Regeln an. Für jede Regel, die nur eine oberflächliche Beschreibung hat, musst du die fehlenden "Warum"- und "Wie"-Teile semantisch sinnvoll aus dem Kontext des gesamten Chatverlaufs ("HAUPTDATEI") rekonstruieren.
 
-1. REKONSTRUKTIONSPLAN (JavaScript):
-- Eine \`processReconstruction(mainContent, skeletonContent, denseContent)\` Funktion.
-- Implementiere die Mustererkennung und semantische Ergänzung.
-- Gib das vollständig rekonstruierte Regelwerk als JSON-Objekt zurück.
+4.  **JSON generieren:** Erstelle ein einziges, valides JSON-Objekt, das das gesamte Regelwerk abbildet.
 
-2. REKONSTRUIERTE DATEN (JSON):
-- Vollständiges Regelwerk mit allen Versionen als JSON-String.
-- Jede Regel mit voller semantischer Tiefe ("Was", "Warum", "Wie").
-- Berücksichtige die historische Entwicklung.
-
-Antworte im folgenden JSON-Format:
+FINALES JSON-FORMAT:
+Gib NUR das JSON-Objekt zurück. Das JSON-Objekt soll so strukturiert sein:
 {
-    "plan": "JavaScript-Code hier...",
-    "data": "JSON-String der rekonstruierten Daten hier..."
-}`;
+  "1.0": {
+    "version": "1.0",
+    "rules": [
+      {
+        "id": "Regel-1",
+        "was": "Der exakte Wortlaut der Regel.",
+        "warum": "Die Absicht oder der Zweck hinter der Regel.",
+        "wie": "Die technische oder funktionale Umsetzung der Regel."
+      }
+    ]
+  }
+}
 
-            addLogEntry('Generiere Rekonstruktionslogik mit KI...');
+Antworte ausschließlich mit dem finalen, vollständigen JSON-String. Kein einleitender Text, keine Erklärungen, nur der JSON-Code.`;
+
+
+            addLogEntry('Generiere rekonstruierte Daten mit KI...');
             setProgress(50);
-
-            const responseSchema = {
-                type: Type.OBJECT,
-                properties: {
-                    plan: { type: Type.STRING },
-                    data: { type: Type.STRING }
-                },
-                required: ["plan", "data"]
-            };
 
             const response = await ai.models.generateContent({
                 model: 'gemini-2.5-pro',
@@ -175,19 +189,14 @@ Antworte im folgenden JSON-Format:
                     topP: 0.8,
                     maxOutputTokens: 8192,
                     responseMimeType: "application/json",
-                    responseSchema: responseSchema
                 }
             });
 
             addLogEntry('Verarbeite KI-Antwort...');
-            setProgress(70);
-
-            const result = JSON.parse(response.text);
-            
-            setReconstructionPlan(result.plan);
+            setProgress(80);
             
             try {
-                const parsedData = JSON.parse(result.data);
+                const parsedData = JSON.parse(response.text);
                 setReconstructedData(JSON.stringify(parsedData, null, 2));
                 
                 const totalRules = countTotalRules(parsedData);
@@ -202,16 +211,16 @@ Antworte im folgenden JSON-Format:
                     semanticDepth
                 });
                 
-                addLogEntry(`Erfolg: ${totalRules} Regeln in ${versionsProcessed} Versionen analysiert.`, 'success');
+                addLogEntry(`Erfolg: ${totalRules} Regeln in ${versionsProcessed} Versionen rekonstruiert.`, 'success');
             } catch (parseError) {
                 addLogEntry(`Warnung: KI-Daten konnten nicht als JSON geparst werden: ${parseError.message}`, 'warning');
-                setReconstructedData(result.data); // show raw data on error
+                setReconstructedData(response.text); // show raw data on error
                 setStats({ totalRules: 0, reconstructedRules: 0, versionsProcessed: 0, semanticDepth: 0 });
             }
 
             setProgress(100);
             setStatusMessage('Semantische Rekonstruktion abgeschlossen! ✓');
-            setActiveTab('analysis');
+            setActiveTab('results'); // Go straight to results
 
         } catch (error) {
             console.error('Fehler:', error);
@@ -224,7 +233,8 @@ Antworte im folgenden JSON-Format:
     };
 
     // Helper functions for statistics
-    const countTotalRules = (data) => {
+    // Fix: Add type annotation for 'data' to resolve property access errors.
+    const countTotalRules = (data: ReconstructedData) => {
         if (!data || typeof data !== 'object') return 0;
         let count = 0;
         Object.values(data).forEach(version => {
@@ -235,7 +245,8 @@ Antworte im folgenden JSON-Format:
         return count;
     };
 
-    const countReconstructedRules = (data) => {
+    // Fix: Add type annotation for 'data' to resolve property access errors.
+    const countReconstructedRules = (data: ReconstructedData) => {
         if (!data || typeof data !== 'object') return 0;
         let count = 0;
         Object.values(data).forEach(version => {
@@ -250,12 +261,14 @@ Antworte im folgenden JSON-Format:
         return count;
     };
 
-    const countVersions = (data) => {
+    // Fix: Add type annotation for 'data' to resolve property access errors.
+    const countVersions = (data: ReconstructedData) => {
         if (!data || typeof data !== 'object') return 0;
         return Object.keys(data).length;
     };
 
-    const calculateSemanticDepth = (data) => {
+    // Fix: Add type annotation for 'data' to resolve property access errors.
+    const calculateSemanticDepth = (data: ReconstructedData) => {
         let totalRules = 0;
         let rulesWithDepth = 0;
         if (!data || typeof data !== 'object') return 0;
@@ -274,62 +287,6 @@ Antworte im folgenden JSON-Format:
         return totalRules > 0 ? Math.round((rulesWithDepth / totalRules) * 100) : 0;
     };
 
-    // Execute reconstruction
-    const executeReconstruction = async () => {
-        if (!reconstructionPlan) {
-            setStatusMessage('Kein Rekonstruktionsplan verfügbar.');
-            return;
-        }
-
-        setIsLoading(true);
-        setProgress(0);
-        setReconstructionLog([]);
-        setStatusMessage('Führe Rekonstruktion aus...');
-
-        try {
-            addLogEntry('Lade Dateien für Ausführung...');
-            setProgress(20);
-
-            const mainContent = await readFileContent(mainFile);
-            const skeletonContent = skeletonFile ? await readFileContent(skeletonFile) : '';
-            const denseContent = denseFile ? await readFileContent(denseFile) : '';
-
-            addLogEntry('Führe Rekonstruktionsskript aus...');
-            setProgress(60);
-            
-            let result;
-            try {
-                const processReconstruction = new Function('mainContent', 'skeletonContent', 'denseContent', `${reconstructionPlan}; return processReconstruction(mainContent, skeletonContent, denseContent);`);
-                result = processReconstruction(mainContent, skeletonContent, denseContent);
-            } catch (e) {
-                throw new Error(`Skript-Fehler: ${e.message}`);
-            }
-            
-            addLogEntry('Verarbeite Daten...');
-            setProgress(80);
-
-            const totalRules = countTotalRules(result);
-            const reconstructedRules = countReconstructedRules(result);
-            const versionsProcessed = countVersions(result);
-            const semanticDepth = calculateSemanticDepth(result);
-            
-            setStats({ totalRules, reconstructedRules, versionsProcessed, semanticDepth });
-            setReconstructedData(JSON.stringify(result, null, 2));
-            
-            addLogEntry(`Ausführung abgeschlossen: ${totalRules} Regeln verarbeitet`, 'success');
-            setProgress(100);
-            setStatusMessage('Rekonstruktion erfolgreich ausgeführt! ✓');
-            setActiveTab('results');
-
-        } catch (error) {
-            console.error('Ausführungsfehler:', error);
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            addLogEntry(`Ausführungsfehler: ${errorMessage}`, 'error');
-            setStatusMessage(`Ausführungsfehler: ${errorMessage}`);
-        } finally {
-            setIsLoading(false);
-        }
-    };
 
     const downloadFile = (content, filename, mimeType) => {
          if (!content) {
@@ -399,10 +356,9 @@ Antworte im folgenden JSON-Format:
                 React.createElement("div", { className: "progress-fill", style: { width: `${progress}%` } }, `${progress}%`)
             )
         ),
-        (reconstructionPlan || reconstructedData) && React.createElement("div", { className: "output-section" },
+        reconstructedData && React.createElement("div", { className: "output-section" },
             React.createElement("div", { className: "tabs" },
                 React.createElement("div", { className: `tab ${activeTab === 'analysis' ? 'active' : ''}`, onClick: () => setActiveTab('analysis') }, React.createElement("i", { className: "fas fa-chart-bar" }), " Analyse & Statistik"),
-                React.createElement("div", { className: `tab ${activeTab === 'plan' ? 'active' : ''}`, onClick: () => setActiveTab('plan') }, React.createElement("i", { className: "fas fa-code" }), " Rekonstruktionsplan"),
                 React.createElement("div", { className: `tab ${activeTab === 'results' ? 'active' : ''}`, onClick: () => setActiveTab('results') }, React.createElement("i", { className: "fas fa-database" }), " Rekonstruierte Daten"),
                 React.createElement("div", { className: `tab ${activeTab === 'log' ? 'active' : ''}`, onClick: () => setActiveTab('log') }, React.createElement("i", { className: "fas fa-list" }), " Rekonstruktions-Log")
             ),
@@ -416,14 +372,8 @@ Antworte im folgenden JSON-Format:
                         React.createElement("div", { className: "stat-card" }, React.createElement("div", { className: "stat-value" }, `${stats.semanticDepth}%`), React.createElement("div", { className: "stat-label" }, "Semantische Tiefe"))
                     ),
                     React.createElement("div", { style: { marginTop: '20px' } },
-                        React.createElement("button", { className: "execute-btn", onClick: executeReconstruction, disabled: isLoading || !reconstructionPlan }, React.createElement("i", { className: "fas fa-play" }), " Rekonstruktion ausführen"),
                         React.createElement("button", { className: "download-btn", onClick: () => downloadFile(reconstructedData, 'evoki_rekonstruiert.json', 'application/json'), disabled: !reconstructedData }, React.createElement("i", { className: "fas fa-download" }), " Daten herunterladen")
                     )
-                ),
-                activeTab === 'plan' && reconstructionPlan && React.createElement("div", null,
-                    React.createElement("h3", null, "Generierter Rekonstruktionsplan"),
-                    React.createElement("div", { className: "code-block" }, React.createElement("button", { className: "copy-btn", onClick: () => copyToClipboard(reconstructionPlan) }, React.createElement("i", { className: "fas fa-copy" }), " Kopieren"), reconstructionPlan),
-                    React.createElement("button", { className: "download-btn", onClick: () => downloadFile(reconstructionPlan, 'rekonstruktions_skript.js', 'text/javascript') }, React.createElement("i", { className: "fas fa-download" }), " Skript herunterladen")
                 ),
                 activeTab === 'results' && reconstructedData && React.createElement("div", null,
                     React.createElement("h3", null, "Rekonstruiertes Regelwerk"),
